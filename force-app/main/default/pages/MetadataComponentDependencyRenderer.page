@@ -1,0 +1,205 @@
+<!--
+  @File Name          : MetadataComponentDependencyRenderer.page
+  @Description        : 
+  @Author             : Yasar Shaikh
+  @Group              : 
+  @Last Modified By   : Yasar Shaikh
+  @Last Modified On   : 4/4/2020, 12:26:20 am
+  @Modification Log   : 
+  Ver       Date            Author      		    Modification
+  1.0      30/3/2020      Yasar Shaikh            Initial Version
+-->
+<apex:page controller="FetchMetadataComponentDependency">
+    <head>
+        <title>Network</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <apex:includeScript value="{!$Resource.vis_network_min}"/>
+        
+        <style type="text/css">
+            #mynetwork {
+                width: 90%;
+                height: 80vh;
+                border: 1px solid lightgray;
+                margin-left: 5%;
+                
+            }
+            
+            h1{
+                font-family: Papyrus;
+                font-size:21px;
+                letter-spacing:0.2em;
+                margin-top: 5%
+                margin-bottom:5px;
+            }
+        </style>
+    </head>
+    <body>    
+        <h1><center>MetadataComponent  Dependency</center></h1>        
+        <div id="mynetwork" style="align:center;">
+                
+        </div>
+        <script type="text/javascript">
+        // create an array with nodes
+       	function getDummyData(){ 
+            var nodes = new vis.DataSet([
+                {id: '1A', label: 'Node 1'},
+                {id: 2, label: 'Node 2'},
+                {id: 3, label: 'Node 3'},
+                {id: 4, label: 'Node 4'},
+                {id: 5, label: 'Node 5'}
+            ]);
+            
+            // create an array with edges
+            var edges = new vis.DataSet([
+                {from: '1A', to: 3},
+                {from: '1A', to: 2},
+                {from: 2, to: 4},
+                {from: 2, to: 5},
+                {from: 3, to: 3}
+            ]);        
+            
+            // create a network        
+            var data = {
+                nodes: nodes,
+                edges: edges
+            };
+            return data;
+        }
+        //var options = {};
+        /* +-+-+-++-+-+-+-+-+-+-+-+-++-+-+-++-+-+-+-+-+-+-+-+-++-+-+-++-+-+-+-+-+-+-+-+-+ */
+        let edges      	=	new Array();
+		let nodes 		=	new Array();
+		let nodeSet		=	new Set();
+        let output		=	'';
+        let data;
+        
+        Visualforce.remoting.timeout = 120000; // Set timeout at page level
+
+        function getNodeObject(id, name, title, selected, shape){
+            
+            let addNodeObj 			= new Object();
+            addNodeObj['id'] 		= name;
+            addNodeObj['label'] 	= name;
+            addNodeObj['title'] 	= title;
+            addNodeObj['selected'] 	= selected;
+            addNodeObj['shape'] 	= shape;
+            return addNodeObj;
+		}
+        
+        
+        function pushEdge(fromEdgeName, toEdgeName){
+            let addEdgeObj 			=	new Object();
+            addEdgeObj['selected'] 	=	true;
+            addEdgeObj['from'] 		=	fromEdgeName;
+            addEdgeObj['to'] 		=	toEdgeName;
+            addEdgeObj['title'] 	= 	fromEdgeName + ' >> ' + toEdgeName;
+            addEdgeObj['label'] 	= 	fromEdgeName + ' >> ' + toEdgeName;
+            
+            addEdgeObj['color'] 	=	{
+                color:"#3385ff",
+                hightlight: "#000000"
+            };
+            addEdgeObj['arrows'] 	=	{
+                to 	: 	{	enabled: true, scaleFactor:1, 	type:'arrow' },
+                from:   {	enabled: true, scaleFactor:0.1, type:'circle'}
+            };
+            
+            
+            addEdgeObj['font'] 		=	{
+                size: 2,
+                color: "#a6a6a6",
+                align: 'bottom'
+            };
+            
+            edges.push(addEdgeObj);
+        }
+               
+        function createGraphicsData(jsonData){
+            if(jsonData){
+                
+                console.log('received json data' );
+            }          
+            
+            Object.keys(jsonData).forEach(function(key){
+                let tempDependentArray = jsonData[key];
+                if(tempDependentArray && tempDependentArray.length > 0){
+                    let id 		= 	tempDependentArray[0].metadataComponentId;
+                    let name	= 	key;
+                    let title 	=	name + ' ' + tempDependentArray[0].metadataComponentType;
+                    
+                    
+                    if(!nodeSet.has(name)){
+                        nodeSet.add(name);
+                        nodes.push( getNodeObject(id, name, title, true, 'circle') );
+                    }				
+                    
+                    tempDependentArray.forEach(function(dependentMetadata){
+                        let id 		= 	dependentMetadata.metadataComponentId;
+                        let name 	= 	dependentMetadata.refMetadataComponentName;
+                        let title	=	name + ' ' + dependentMetadata.refMetadataComponentType;
+                        
+                        if(!nodeSet.has( dependentMetadata.refMetadataComponentName ) ){
+                            nodeSet.add( dependentMetadata.refMetadataComponentName );
+                            
+                            nodes.push( getNodeObject(id, name, title, name, 'circle') );
+                            pushEdge(key, name);
+                        }
+                        
+                    })
+                }
+            })
+            
+            console.log(nodes);
+            let graphData 	=	new Object();
+            graphData 		=	{	nodes: nodes,	edges: edges };
+            return graphData;
+        }
+        
+        window.onload =  function loadData(){
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.FetchMetadataComponentDependency.fetchMetadata}', 
+                'ApexClass', 
+                function(result, event){
+                    if (event.status) {
+                        output 	=	JSON.parse(result);
+                        data	=	createGraphicsData( output );  
+                        try{
+                            var container 	= 	document.getElementById('mynetwork');
+                            var options 	= 	new Object();
+                            //var data		=	createGraphicsData(output);
+                            
+                            options['layout'] = {
+                                randomSeed: 1,
+                                improvedLayout:false
+                            };
+                            
+                            options['interaction'] = {
+                                keyboard: {
+                                    enabled: false,
+                                    speed: {x: 10, y: 10, zoom: 0.02},
+                                    bindToWindow: true
+                                },
+                                multiselect: true,
+                                navigationButtons: true
+                            };
+                            var network = new vis.Network(container, data, options);
+                        }catch(err){
+                            alert('Error: ' + err);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert('Error ' +   event.message);
+                    } else {
+                        alert('Got something: ' + event.message);
+                    }
+                }, 
+                {escape: false}
+            );
+        }
+        /*********************************************************************************/
+        
+        
+        </script>
+    </body>
+    
+</apex:page>
